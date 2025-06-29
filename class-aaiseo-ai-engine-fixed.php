@@ -951,4 +951,72 @@ Please provide analysis in the following JSON structure:
         
         return $content;
     }
+    
+    /**
+     * Generate recommendations based on prompt
+     */
+    public function generateRecommendations($prompt) {
+        // Get active provider
+        $provider_status = $this->getAPIProviderStatus();
+        $provider = $provider_status['active_provider'];
+        
+        // If using internal, return generic recommendations
+        if ($provider === 'internal') {
+            return array(
+                'recommendations' => array(
+                    array(
+                        'title' => 'Improve Content Structure',
+                        'description' => 'Break content into smaller, more digestible sections with clear headings and subheadings.'
+                    ),
+                    array(
+                        'title' => 'Enhance Call-to-Action',
+                        'description' => 'Make your CTAs more prominent and use action-oriented language to encourage clicks.'
+                    ),
+                    array(
+                        'title' => 'Optimize for Mobile Users',
+                        'description' => 'Ensure all elements are properly sized for mobile screens and touch interactions.'
+                    ),
+                    array(
+                        'title' => 'Improve Page Load Speed',
+                        'description' => 'Optimize images and minimize unnecessary scripts to improve page load times.'
+                    )
+                )
+            );
+        }
+        
+        $response = $this->makeAIRequest($prompt, 'You are an expert in user experience and conversion rate optimization. Provide specific, actionable recommendations to improve engagement and conversion rates.', $provider);
+        
+        if (is_wp_error($response)) {
+            return array('recommendations' => array());
+        }
+        
+        // Try to parse JSON response
+        $parsed = json_decode($response, true);
+        if ($parsed && isset($parsed['recommendations'])) {
+            return $parsed;
+        }
+        
+        // Fallback to text parsing
+        preg_match_all('/\d+\.\s+(.*?)(?=\d+\.|$)/s', $response, $matches);
+        if (!empty($matches[1])) {
+            $recommendations = array();
+            foreach ($matches[1] as $rec) {
+                $parts = explode(':', $rec, 2);
+                if (count($parts) === 2) {
+                    $recommendations[] = array(
+                        'title' => trim($parts[0]),
+                        'description' => trim($parts[1])
+                    );
+                } else {
+                    $recommendations[] = array(
+                        'title' => 'Recommendation',
+                        'description' => trim($rec)
+                    );
+                }
+            }
+            return array('recommendations' => $recommendations);
+        }
+        
+        return array('recommendations' => array());
+    }
 }

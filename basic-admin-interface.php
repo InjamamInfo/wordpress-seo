@@ -103,6 +103,10 @@ class AAISEO_Admin {
             $sanitized['deepseek_api_key'] = sanitize_text_field($input['deepseek_api_key']);
         }
         
+        // Preserve existing settings not in this form
+        $existing_options = get_option('aaiseo_settings', array());
+        $sanitized = array_merge($existing_options, $sanitized);
+        
         return $sanitized;
     }
     

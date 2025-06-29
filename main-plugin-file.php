@@ -93,6 +93,20 @@ class Autonomous_AI_SEO {
         // Core classes - using the actual file name
         require_once AAISEO_PLUGIN_PATH . 'class-aaiseo-ai-engine-fixed.php';
         
+        // Load admin interface
+        if (is_admin() && file_exists(AAISEO_PLUGIN_PATH . 'basic-admin-interface.php')) {
+            require_once AAISEO_PLUGIN_PATH . 'basic-admin-interface.php';
+        }
+        
+        // Load activation/deactivation handlers
+        if (file_exists(AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-activation.php')) {
+            require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-activation.php';
+        }
+        
+        if (file_exists(AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-deactivation.php')) {
+            require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-deactivation.php';
+        }
+        
         // Only load additional classes if they exist
         if (is_admin() && file_exists(AAISEO_PLUGIN_PATH . 'admin/class-aaiseo-admin.php')) {
             require_once AAISEO_PLUGIN_PATH . 'admin/class-aaiseo-admin.php';
@@ -208,110 +222,17 @@ class Autonomous_AI_SEO {
      * Plugin activation
      */
     public function activate() {
-        // Create database tables if needed
-        $this->create_database_tables();
-        
-        // Set default options
-        $default_options = array(
-            'plugin_version' => AAISEO_PLUGIN_VERSION,
-            'preferred_ai_provider' => 'internal',
-            'openai_api_key' => '',
-            'grok_api_key' => '',
-            'gemini_api_key' => '',
-            'deepseek_api_key' => '',
-            'auto_optimize' => false,
-            'cache_duration' => 3600
-        );
-        
-        add_option('aaiseo_settings', $default_options);
-        
-        // Flush rewrite rules
-        flush_rewrite_rules();
+        if (class_exists('AAISEO_Activation')) {
+            AAISEO_Activation::activate();
+        }
     }
     
     /**
      * Plugin deactivation
      */
     public function deactivate() {
-        // Clear caches
-        $this->clear_plugin_caches();
-        
-        // Flush rewrite rules
-        flush_rewrite_rules();
-    }
-    
-    /**
-     * Create database tables
-     */
-    private function create_database_tables() {
-        global $wpdb;
-        
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        // SEO Reports table
-        $table_name = $wpdb->prefix . 'aaiseo_reports';
-        
-        $sql = "CREATE TABLE $table_name (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
-            post_id bigint(20) NOT NULL,
-            report_type varchar(50) NOT NULL,
-            report_data longtext NOT NULL,
-            score int(3) DEFAULT 0,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            KEY post_id (post_id),
-            KEY report_type (report_type),
-            KEY created_at (created_at)
-        ) $charset_collate;";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        // Cache table
-        $cache_table = $wpdb->prefix . 'aaiseo_cache';
-        
-        $cache_sql = "CREATE TABLE $cache_table (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
-            cache_key varchar(255) NOT NULL,
-            cache_value longtext NOT NULL,
-            expires_at datetime NOT NULL,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY cache_key (cache_key),
-            KEY expires_at (expires_at)
-        ) $charset_collate;";
-        
-        dbDelta($cache_sql);
-        
-        // Update plugin version in database
-        update_option('aaiseo_db_version', AAISEO_PLUGIN_VERSION);
-    }
-    
-    /**
-     * Clear plugin caches
-     */
-    private function clear_plugin_caches() {
-        // Clear WordPress transients
-        global $wpdb;
-        
-        $wpdb->query(
-            "DELETE FROM {$wpdb->options} 
-             WHERE option_name LIKE '_transient_aaiseo_%' 
-             OR option_name LIKE '_transient_timeout_aaiseo_%'"
-        );
-        
-        // Clear custom cache table
-        $cache_table = $wpdb->prefix . 'aaiseo_cache';
-        
-        // Check if table exists before truncating
-        $table_exists = $wpdb->get_var($wpdb->prepare(
-            "SHOW TABLES LIKE %s",
-            $cache_table
-        ));
-        
-        if ($table_exists) {
-            $wpdb->query("TRUNCATE TABLE $cache_table");
+        if (class_exists('AAISEO_Deactivation')) {
+            AAISEO_Deactivation::deactivate();
         }
     }
 }
