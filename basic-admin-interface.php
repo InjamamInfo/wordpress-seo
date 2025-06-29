@@ -84,15 +84,31 @@ class AAISEO_Admin {
         $sanitized = array();
         
         if (isset($input['preferred_ai_provider'])) {
-            $sanitized['preferred_ai_provider'] = sanitize_text_field($input['preferred_ai_provider']);
+            $allowed_providers = array('internal', 'openai', 'gemini', 'grok', 'deepseek');
+            $provider = sanitize_text_field($input['preferred_ai_provider']);
+            $sanitized['preferred_ai_provider'] = in_array($provider, $allowed_providers) ? $provider : 'internal';
         }
         
         if (isset($input['openai_api_key'])) {
-            $sanitized['openai_api_key'] = sanitize_text_field($input['openai_api_key']);
+            $api_key = sanitize_text_field($input['openai_api_key']);
+            // Basic validation for OpenAI API key format
+            if (empty($api_key) || preg_match('/^sk-[a-zA-Z0-9]{48}$/', $api_key) || preg_match('/^sk-proj-[a-zA-Z0-9_-]{48,}$/', $api_key)) {
+                $sanitized['openai_api_key'] = $api_key;
+            } else {
+                add_settings_error('aaiseo_settings', 'invalid_openai_key', __('Invalid OpenAI API key format.', 'autonomous-ai-seo'));
+                $sanitized['openai_api_key'] = '';
+            }
         }
         
         if (isset($input['gemini_api_key'])) {
-            $sanitized['gemini_api_key'] = sanitize_text_field($input['gemini_api_key']);
+            $api_key = sanitize_text_field($input['gemini_api_key']);
+            // Basic validation for Gemini API key format
+            if (empty($api_key) || preg_match('/^[a-zA-Z0-9_-]{39}$/', $api_key)) {
+                $sanitized['gemini_api_key'] = $api_key;
+            } else {
+                add_settings_error('aaiseo_settings', 'invalid_gemini_key', __('Invalid Gemini API key format.', 'autonomous-ai-seo'));
+                $sanitized['gemini_api_key'] = '';
+            }
         }
         
         if (isset($input['grok_api_key'])) {
@@ -247,11 +263,20 @@ class AAISEO_Admin {
     public function test_api_connection() {
         check_ajax_referer('aaiseo_nonce', 'nonce');
         
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Insufficient permissions.', 'autonomous-ai-seo'));
+        }
+        
         $provider = sanitize_text_field($_POST['provider']);
+        
+        if (!in_array($provider, array('openai', 'gemini', 'grok', 'deepseek'))) {
+            wp_send_json_error(__('Invalid provider.', 'autonomous-ai-seo'));
+        }
+        
         $ai_engine = AAISEO_AI_Engine::getInstance();
         
         // Simple test prompt
-        $result = $ai_engine->generateRecommendations('Test connection for ' . $provider);
+        $result = $ai_engine->makeAIRequest('Test connection', 'You are a helpful assistant. Respond with "Connection successful" if you receive this message.', $provider);
         
         if (is_wp_error($result)) {
             wp_send_json_error($result->get_error_message());

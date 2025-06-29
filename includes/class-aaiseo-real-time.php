@@ -12,8 +12,10 @@ class AAISEO_Real_Time {
     public function __construct() {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_real_time_scripts'));
         add_action('wp_ajax_aaiseo_real_time_analyze', array($this, 'ajax_real_time_analyze'));
+        add_action('wp_ajax_aaiseo_generate_suggestions', array($this, 'ajax_generate_suggestions'));
         add_filter('the_editor', array($this, 'add_seo_panel_to_editor'));
         add_action('add_meta_boxes', array($this, 'add_seo_meta_box'));
+        add_action('save_post', array($this, 'save_meta_box_data'));
     }
     
     /**
@@ -82,8 +84,15 @@ class AAISEO_Real_Time {
         
         // Get existing analysis if available
         $existing_analysis = get_post_meta($post->ID, '_aaiseo_analysis', true);
+        $target_keywords = get_post_meta($post->ID, '_aaiseo_target_keywords', true);
         ?>
         <div id="aaiseo-real-time-panel">
+            <div class="aaiseo-settings-section" style="margin-bottom: 15px;">
+                <label for="aaiseo_target_keywords"><?php _e('Target Keywords:', 'autonomous-ai-seo'); ?></label>
+                <input type="text" id="aaiseo_target_keywords" name="aaiseo_target_keywords" value="<?php echo esc_attr($target_keywords); ?>" placeholder="<?php _e('Enter keywords separated by commas', 'autonomous-ai-seo'); ?>" style="width: 100%; margin-top: 5px;" />
+                <p class="description"><?php _e('These keywords will be used for SEO analysis and optimization suggestions.', 'autonomous-ai-seo'); ?></p>
+            </div>
+            
             <div class="aaiseo-score-container">
                 <div class="aaiseo-score-circle" data-score="0">
                     <span class="aaiseo-score-number">0</span>
@@ -462,6 +471,64 @@ class AAISEO_Real_Time {
         }
         
         return $recommendations;
+    }
+    
+    /**
+     * AJAX handler for generating suggestions (referenced in JS but missing)
+     */
+    public function ajax_generate_suggestions() {
+        check_ajax_referer('aaiseo_real_time_nonce', 'nonce');
+        
+        $topic = isset($_POST['topic']) ? sanitize_text_field($_POST['topic']) : '';
+        $target_audience = isset($_POST['target_audience']) ? sanitize_text_field($_POST['target_audience']) : 'general audience';
+        
+        if (empty($topic)) {
+            wp_send_json_error(__('Please provide a topic.', 'autonomous-ai-seo'));
+        }
+        
+        try {
+            $ai_engine = AAISEO_AI_Engine::getInstance();
+            $suggestions = $ai_engine->generateContentOutline($topic, $target_audience);
+            
+            if (is_wp_error($suggestions)) {
+                wp_send_json_error($suggestions->get_error_message());
+            }
+            
+            // Parse JSON if it's a string
+            if (is_string($suggestions)) {
+                $suggestions = json_decode($suggestions, true);
+            }
+            
+            wp_send_json_success($suggestions);
+            
+        } catch (Exception $e) {
+            wp_send_json_error(__('Failed to generate suggestions: ', 'autonomous-ai-seo') . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Save meta box data when post is saved
+     */
+    public function save_meta_box_data($post_id) {
+        // Check if this is an autosave
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            return;
+        }
+        
+        // Check nonce
+        if (!isset($_POST['aaiseo_meta_box_nonce']) || !wp_verify_nonce($_POST['aaiseo_meta_box_nonce'], 'aaiseo_meta_box')) {
+            return;
+        }
+        
+        // Check permissions
+        if (!current_user_can('edit_post', $post_id)) {
+            return;
+        }
+        
+        // Save target keywords if provided
+        if (isset($_POST['aaiseo_target_keywords'])) {
+            update_post_meta($post_id, '_aaiseo_target_keywords', sanitize_text_field($_POST['aaiseo_target_keywords']));
+        }
     }
 }
 

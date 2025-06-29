@@ -356,6 +356,19 @@ class AAISEO_REST_API {
         try {
             $reports_table = $wpdb->prefix . 'aaiseo_reports';
             
+            // Check if table exists
+            $table_exists = $wpdb->get_var($wpdb->prepare(
+                "SHOW TABLES LIKE %s",
+                $reports_table
+            ));
+            
+            if (!$table_exists) {
+                return new WP_REST_Response(array(
+                    'success' => false,
+                    'message' => __('Reports table not found. Please reactivate the plugin.', 'autonomous-ai-seo')
+                ), 500);
+            }
+            
             $where_clauses = array();
             $where_values = array();
             
@@ -377,6 +390,14 @@ class AAISEO_REST_API {
             );
             
             $reports = $wpdb->get_results($sql);
+            
+            // Check for database errors
+            if ($wpdb->last_error) {
+                return new WP_REST_Response(array(
+                    'success' => false,
+                    'message' => __('Database error occurred.', 'autonomous-ai-seo')
+                ), 500);
+            }
             
             // Parse report data
             foreach ($reports as &$report) {
@@ -406,12 +427,26 @@ class AAISEO_REST_API {
         
         $reports_table = $wpdb->prefix . 'aaiseo_reports';
         
+        // Check if table exists before inserting
+        $table_exists = $wpdb->get_var($wpdb->prepare(
+            "SHOW TABLES LIKE %s",
+            $reports_table
+        ));
+        
+        if (!$table_exists) {
+            // Try to create the table
+            require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-activation.php';
+            if (class_exists('AAISEO_Activation')) {
+                AAISEO_Activation::activate();
+            }
+        }
+        
         $score = 0;
         if (isset($optimizations['content_analysis']['seo_score'])) {
             $score = intval($optimizations['content_analysis']['seo_score']);
         }
         
-        $wpdb->insert(
+        $result = $wpdb->insert(
             $reports_table,
             array(
                 'post_id' => $post_id,
@@ -422,6 +457,13 @@ class AAISEO_REST_API {
             ),
             array('%d', '%s', '%s', '%d', '%s')
         );
+        
+        // Log any database errors
+        if ($wpdb->last_error) {
+            error_log('AAISEO Database Error: ' . $wpdb->last_error);
+        }
+        
+        return $result !== false;
     }
 }
 

@@ -91,12 +91,19 @@ class AAISEO_Activation {
             'auto_optimize' => false,
             'cache_duration' => 3600,
             'max_requests_per_hour' => 100,
-            'enable_logging' => false
+            'enable_logging' => false,
+            'real_time_analysis' => true,
+            'analysis_delay' => 2000
         );
         
         // Only set if option doesn't exist
         if (!get_option('aaiseo_settings')) {
             add_option('aaiseo_settings', $default_options);
+        } else {
+            // Update existing options with new defaults
+            $existing_options = get_option('aaiseo_settings', array());
+            $updated_options = array_merge($default_options, $existing_options);
+            update_option('aaiseo_settings', $updated_options);
         }
     }
     

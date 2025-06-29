@@ -192,8 +192,12 @@ class Autonomous_AI_SEO {
      * Enqueue admin scripts and styles
      */
     public function enqueue_admin_scripts($hook_suffix) {
-        // Only load on plugin pages
-        if (strpos($hook_suffix, 'aaiseo') === false) {
+        // Load on plugin pages and post edit pages
+        $load_on_pages = array('post.php', 'post-new.php');
+        $is_plugin_page = strpos($hook_suffix, 'aaiseo') !== false;
+        $is_edit_page = in_array($hook_suffix, $load_on_pages);
+        
+        if (!$is_plugin_page && !$is_edit_page) {
             return;
         }
         
@@ -225,7 +229,13 @@ class Autonomous_AI_SEO {
                 array(
                     'ajax_url' => admin_url('admin-ajax.php'),
                     'nonce' => wp_create_nonce('aaiseo_nonce'),
-                    'plugin_url' => AAISEO_PLUGIN_URL
+                    'plugin_url' => AAISEO_PLUGIN_URL,
+                    'strings' => array(
+                        'error' => __('An error occurred. Please try again.', 'autonomous-ai-seo'),
+                        'success' => __('Operation completed successfully.', 'autonomous-ai-seo'),
+                        'analyzing' => __('Analyzing...', 'autonomous-ai-seo'),
+                        'loading' => __('Loading...', 'autonomous-ai-seo')
+                    )
                 )
             );
         }

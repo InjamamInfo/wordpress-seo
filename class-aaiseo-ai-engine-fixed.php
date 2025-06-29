@@ -142,7 +142,7 @@ class AAISEO_AI_Engine {
     /**
      * Make a request to the appropriate AI provider
      */
-    private function makeAIRequest($prompt, $system_prompt = '', $provider = null) {
+    public function makeAIRequest($prompt, $system_prompt = '', $provider = null) {
         $selected_provider = $this->selectAIProvider($provider);
         
         switch ($selected_provider) {
