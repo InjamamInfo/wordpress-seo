@@ -87,6 +87,9 @@ class Autonomous_AI_SEO {
         
         // Initialize cron jobs
         $this->init_cron_jobs();
+        
+        // Hook weekly report generation
+        add_action('aaiseo_generate_reports', array($this, 'generate_weekly_reports_cron'));
     }
     
     /**
@@ -217,6 +220,162 @@ class Autonomous_AI_SEO {
         $current_usage = $this->get_api_usage($provider);
         
         return $current_usage >= $max_requests;
+    }
+    
+    /**
+     * Generate weekly reports (cron job)
+     */
+    public function generate_weekly_reports_cron() {
+        try {
+            global $wpdb;
+            
+            // Get posts that have been analyzed in the last week
+            $reports_table = $wpdb->prefix . 'aaiseo_reports';
+            $table_exists = $wpdb->get_var($wpdb->prepare(
+                "SHOW TABLES LIKE %s",
+                $reports_table
+            ));
+            
+            if (!$table_exists) {
+                error_log('AAISEO Weekly Reports: Reports table not found');
+                return;
+            }
+            
+            $one_week_ago = date('Y-m-d H:i:s', strtotime('-1 week'));
+            
+            // Get performance data for the last week
+            $recent_reports = $wpdb->get_results($wpdb->prepare(
+                "SELECT post_id, AVG(score) as avg_score, COUNT(*) as analysis_count, MAX(created_at) as last_analysis
+                 FROM $reports_table 
+                 WHERE created_at >= %s 
+                 GROUP BY post_id 
+                 ORDER BY avg_score DESC 
+                 LIMIT 50",
+                $one_week_ago
+            ));
+            
+            if (empty($recent_reports)) {
+                error_log('AAISEO Weekly Reports: No recent reports found');
+                return;
+            }
+            
+            // Calculate statistics
+            $total_posts = count($recent_reports);
+            $avg_seo_score = array_sum(array_column($recent_reports, 'avg_score')) / $total_posts;
+            $top_performing_posts = array_slice($recent_reports, 0, 5);
+            $needs_improvement = array_filter($recent_reports, function($report) {
+                return $report->avg_score < 60;
+            });
+            
+            // Prepare report data
+            $report_data = array(
+                'period' => array(
+                    'start' => $one_week_ago,
+                    'end' => current_time('mysql')
+                ),
+                'summary' => array(
+                    'total_posts_analyzed' => $total_posts,
+                    'average_seo_score' => round($avg_seo_score, 1),
+                    'posts_needing_improvement' => count($needs_improvement),
+                    'improvement_percentage' => $total_posts > 0 ? round((count($needs_improvement) / $total_posts) * 100, 1) : 0
+                ),
+                'top_performing' => $top_performing_posts,
+                'needs_improvement' => array_slice($needs_improvement, 0, 10),
+                'recommendations' => $this->generate_weekly_recommendations($recent_reports)
+            );
+            
+            // Save the weekly report
+            $wpdb->insert(
+                $reports_table,
+                array(
+                    'post_id' => 0, // 0 indicates a global report
+                    'report_type' => 'weekly_summary',
+                    'report_data' => json_encode($report_data),
+                    'score' => round($avg_seo_score),
+                    'created_at' => current_time('mysql')
+                ),
+                array('%d', '%s', '%s', '%d', '%s')
+            );
+            
+            // Optionally email report to admin
+            $settings = get_option('aaiseo_settings', array());
+            if (isset($settings['email_weekly_reports']) && $settings['email_weekly_reports']) {
+                $this->email_weekly_report($report_data);
+            }
+            
+            // Log successful generation
+            if ($settings['enable_logging'] ?? false) {
+                error_log('AAISEO: Weekly report generated successfully for ' . $total_posts . ' posts');
+            }
+            
+        } catch (Exception $e) {
+            error_log('AAISEO Weekly Reports Error: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Generate recommendations for weekly report
+     */
+    private function generate_weekly_recommendations($reports) {
+        $recommendations = array();
+        
+        $low_score_count = count(array_filter($reports, function($r) { return $r->avg_score < 60; }));
+        $total_count = count($reports);
+        
+        if ($low_score_count > ($total_count * 0.5)) {
+            $recommendations[] = 'More than half of your content needs SEO improvement. Focus on optimizing low-scoring posts first.';
+        }
+        
+        $recent_analysis = array_filter($reports, function($r) {
+            return strtotime($r->last_analysis) > strtotime('-3 days');
+        });
+        
+        if (count($recent_analysis) < ($total_count * 0.3)) {
+            $recommendations[] = 'Many posts haven\'t been analyzed recently. Consider running fresh analyses to get updated recommendations.';
+        }
+        
+        $high_score_count = count(array_filter($reports, function($r) { return $r->avg_score >= 80; }));
+        
+        if ($high_score_count > ($total_count * 0.7)) {
+            $recommendations[] = 'Excellent work! Most of your content is well-optimized. Continue maintaining this high standard.';
+        }
+        
+        $recommendations[] = 'Review the posts marked as "needs improvement" and implement the suggested optimizations.';
+        $recommendations[] = 'Consider adding more target keywords to posts with low keyword density scores.';
+        
+        return array_slice($recommendations, 0, 5);
+    }
+    
+    /**
+     * Email weekly report to admin
+     */
+    private function email_weekly_report($report_data) {
+        $admin_email = get_option('admin_email');
+        $site_name = get_bloginfo('name');
+        
+        $subject = sprintf('[%s] Weekly SEO Report - %s', $site_name, date('M j, Y'));
+        
+        $message = sprintf(
+            "Weekly SEO Report for %s\n\n" .
+            "Period: %s to %s\n\n" .
+            "Summary:\n" .
+            "- Posts Analyzed: %d\n" .
+            "- Average SEO Score: %s\n" .
+            "- Posts Needing Improvement: %d (%s%%)\n\n" .
+            "Top Recommendations:\n%s\n\n" .
+            "View detailed reports in your WordPress admin dashboard under AI SEO.\n\n" .
+            "This is an automated email from the Autonomous AI SEO plugin.",
+            $site_name,
+            date('M j, Y', strtotime($report_data['period']['start'])),
+            date('M j, Y', strtotime($report_data['period']['end'])),
+            $report_data['summary']['total_posts_analyzed'],
+            $report_data['summary']['average_seo_score'],
+            $report_data['summary']['posts_needing_improvement'],
+            $report_data['summary']['improvement_percentage'],
+            implode("\n", array_map(function($rec) { return "- {$rec}"; }, $report_data['recommendations']))
+        );
+        
+        wp_mail($admin_email, $subject, $message);
     }
     
     /**
