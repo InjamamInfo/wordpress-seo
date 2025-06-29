@@ -84,6 +84,139 @@ class Autonomous_AI_SEO {
         // Hook into WordPress
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_scripts'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+        
+        // Initialize cron jobs
+        $this->init_cron_jobs();
+    }
+    
+    /**
+     * Initialize cron job handlers
+     */
+    private function init_cron_jobs() {
+        add_action('aaiseo_cleanup_cache', array($this, 'cleanup_cache_cron'));
+        add_action('aaiseo_reset_api_usage', array($this, 'reset_api_usage_cron'));
+    }
+    
+    /**
+     * Cron job to cleanup expired cache entries
+     */
+    public function cleanup_cache_cron() {
+        global $wpdb;
+        
+        try {
+            // Clean up expired transients
+            $wpdb->query(
+                "DELETE FROM {$wpdb->options} 
+                 WHERE option_name LIKE '_transient_timeout_aaiseo_%' 
+                 AND option_value < UNIX_TIMESTAMP()"
+            );
+            
+            // Clean up corresponding transient data
+            $wpdb->query(
+                "DELETE FROM {$wpdb->options} 
+                 WHERE option_name LIKE '_transient_aaiseo_%' 
+                 AND option_name NOT IN (
+                     SELECT REPLACE(option_name, '_timeout', '') 
+                     FROM {$wpdb->options} 
+                     WHERE option_name LIKE '_transient_timeout_aaiseo_%'
+                 )"
+            );
+            
+            // Clean up custom cache table if it exists
+            $cache_table = $wpdb->prefix . 'aaiseo_cache';
+            $table_exists = $wpdb->get_var($wpdb->prepare(
+                "SHOW TABLES LIKE %s",
+                $cache_table
+            ));
+            
+            if ($table_exists) {
+                $wpdb->query(
+                    "DELETE FROM $cache_table WHERE expires_at < NOW()"
+                );
+            }
+            
+            // Log successful cleanup
+            if (get_option('aaiseo_settings')['enable_logging'] ?? false) {
+                error_log('AAISEO: Cache cleanup completed successfully');
+            }
+            
+        } catch (Exception $e) {
+            error_log('AAISEO Cache Cleanup Error: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Cron job to reset API usage counters
+     */
+    public function reset_api_usage_cron() {
+        try {
+            // Reset hourly API usage counters
+            delete_transient('aaiseo_api_usage_openai');
+            delete_transient('aaiseo_api_usage_gemini');
+            delete_transient('aaiseo_api_usage_grok');
+            delete_transient('aaiseo_api_usage_deepseek');
+            
+            // Reset daily counters (if tracking daily limits)
+            $current_date = date('Y-m-d');
+            delete_option('aaiseo_daily_usage_' . $current_date);
+            
+            // Clean up old daily usage records (keep last 30 days)
+            $cutoff_date = date('Y-m-d', strtotime('-30 days'));
+            global $wpdb;
+            
+            $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE FROM {$wpdb->options} 
+                     WHERE option_name LIKE 'aaiseo_daily_usage_%%' 
+                     AND option_name < %s",
+                    'aaiseo_daily_usage_' . $cutoff_date
+                )
+            );
+            
+            // Log successful reset
+            if (get_option('aaiseo_settings')['enable_logging'] ?? false) {
+                error_log('AAISEO: API usage counters reset successfully');
+            }
+            
+        } catch (Exception $e) {
+            error_log('AAISEO API Usage Reset Error: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get current API usage for a provider
+     */
+    public function get_api_usage($provider) {
+        $usage = get_transient('aaiseo_api_usage_' . $provider);
+        return intval($usage);
+    }
+    
+    /**
+     * Increment API usage counter for a provider
+     */
+    public function increment_api_usage($provider) {
+        $current_usage = $this->get_api_usage($provider);
+        $new_usage = $current_usage + 1;
+        
+        // Set transient to expire at the top of the next hour
+        $next_hour = strtotime('+1 hour', strtotime(date('Y-m-d H:00:00')));
+        $expire_time = $next_hour - time();
+        
+        set_transient('aaiseo_api_usage_' . $provider, $new_usage, $expire_time);
+        
+        return $new_usage;
+    }
+    
+    /**
+     * Check if API usage limit is exceeded
+     */
+    public function is_usage_limit_exceeded($provider) {
+        $settings = get_option('aaiseo_settings', array());
+        $max_requests = isset($settings['max_requests_per_hour']) ? intval($settings['max_requests_per_hour']) : 100;
+        
+        $current_usage = $this->get_api_usage($provider);
+        
+        return $current_usage >= $max_requests;
     }
     
     /**

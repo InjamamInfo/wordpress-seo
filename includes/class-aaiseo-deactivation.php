@@ -29,6 +29,7 @@ class AAISEO_Deactivation {
     private static function clear_scheduled_events() {
         wp_clear_scheduled_hook('aaiseo_cleanup_cache');
         wp_clear_scheduled_hook('aaiseo_reset_api_usage');
+        wp_clear_scheduled_hook('aaiseo_generate_reports');
     }
     
     /**

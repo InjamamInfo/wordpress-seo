@@ -127,14 +127,19 @@ class AAISEO_Activation {
      * Schedule cron events
      */
     private static function schedule_events() {
-        // Schedule cache cleanup
+        // Schedule cache cleanup (daily)
         if (!wp_next_scheduled('aaiseo_cleanup_cache')) {
             wp_schedule_event(time(), 'daily', 'aaiseo_cleanup_cache');
         }
         
-        // Schedule API usage reset
+        // Schedule API usage reset (hourly)
         if (!wp_next_scheduled('aaiseo_reset_api_usage')) {
             wp_schedule_event(time(), 'hourly', 'aaiseo_reset_api_usage');
+        }
+        
+        // Schedule weekly optimization report generation
+        if (!wp_next_scheduled('aaiseo_generate_reports')) {
+            wp_schedule_event(time(), 'weekly', 'aaiseo_generate_reports');
         }
     }
 }
