@@ -434,11 +434,9 @@ class AAISEO_REST_API {
         ));
         
         if (!$table_exists) {
-            // Try to create the table
-            require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-activation.php';
-            if (class_exists('AAISEO_Activation')) {
-                AAISEO_Activation::activate();
-            }
+            // Log an error if the table is missing, as it should have been created during activation
+            error_log('AAISEO Error: Reports table (' . $reports_table . ') not found. Please ensure the plugin is activated correctly.');
+            return false; // Indicate that the report could not be saved
         }
         
         $score = 0;
@@ -461,6 +459,7 @@ class AAISEO_REST_API {
         // Log any database errors
         if ($wpdb->last_error) {
             error_log('AAISEO Database Error: ' . $wpdb->last_error);
+            return false;
         }
         
         return $result !== false;
