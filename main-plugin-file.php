@@ -90,17 +90,21 @@ class Autonomous_AI_SEO {
      * Load plugin dependencies
      */
     private function load_dependencies() {
-        // Core classes
-        require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-ai-engine.php';
+        // Core classes - using the actual file name
+        require_once AAISEO_PLUGIN_PATH . 'class-aaiseo-ai-engine-fixed.php';
         
-        // Admin classes
-        if (is_admin()) {
+        // Only load additional classes if they exist
+        if (is_admin() && file_exists(AAISEO_PLUGIN_PATH . 'admin/class-aaiseo-admin.php')) {
             require_once AAISEO_PLUGIN_PATH . 'admin/class-aaiseo-admin.php';
+        }
+        
+        if (is_admin() && file_exists(AAISEO_PLUGIN_PATH . 'admin/class-aaiseo-settings.php')) {
             require_once AAISEO_PLUGIN_PATH . 'admin/class-aaiseo-settings.php';
         }
         
-        // Frontend classes
-        require_once AAISEO_PLUGIN_PATH . 'public/class-aaiseo-public.php';
+        if (file_exists(AAISEO_PLUGIN_PATH . 'public/class-aaiseo-public.php')) {
+            require_once AAISEO_PLUGIN_PATH . 'public/class-aaiseo-public.php';
+        }
     }
     
     /**
@@ -136,22 +140,25 @@ class Autonomous_AI_SEO {
      * Enqueue frontend scripts and styles
      */
     public function enqueue_frontend_scripts() {
-        // Enqueue frontend CSS
-        wp_enqueue_style(
-            'aaiseo-frontend',
-            AAISEO_PLUGIN_URL . 'assets/css/frontend.css',
-            array(),
-            AAISEO_PLUGIN_VERSION
-        );
+        // Only enqueue if files exist
+        if (file_exists(AAISEO_PLUGIN_PATH . 'assets/css/frontend.css')) {
+            wp_enqueue_style(
+                'aaiseo-frontend',
+                AAISEO_PLUGIN_URL . 'assets/css/frontend.css',
+                array(),
+                AAISEO_PLUGIN_VERSION
+            );
+        }
         
-        // Enqueue frontend JS
-        wp_enqueue_script(
-            'aaiseo-frontend',
-            AAISEO_PLUGIN_URL . 'assets/js/frontend.js',
-            array('jquery'),
-            AAISEO_PLUGIN_VERSION,
-            true
-        );
+        if (file_exists(AAISEO_PLUGIN_PATH . 'assets/js/frontend.js')) {
+            wp_enqueue_script(
+                'aaiseo-frontend',
+                AAISEO_PLUGIN_URL . 'assets/js/frontend.js',
+                array('jquery'),
+                AAISEO_PLUGIN_VERSION,
+                true
+            );
+        }
     }
     
     /**
@@ -163,33 +170,38 @@ class Autonomous_AI_SEO {
             return;
         }
         
-        // Enqueue admin CSS
-        wp_enqueue_style(
-            'aaiseo-admin',
-            AAISEO_PLUGIN_URL . 'assets/css/admin.css',
-            array(),
-            AAISEO_PLUGIN_VERSION
-        );
+        // Only enqueue if files exist
+        if (file_exists(AAISEO_PLUGIN_PATH . 'assets/css/admin.css')) {
+            wp_enqueue_style(
+                'aaiseo-admin',
+                AAISEO_PLUGIN_URL . 'assets/css/admin.css',
+                array(),
+                AAISEO_PLUGIN_VERSION
+            );
+        }
         
-        // Enqueue admin JS
-        wp_enqueue_script(
-            'aaiseo-admin',
-            AAISEO_PLUGIN_URL . 'assets/js/admin.js',
-            array('jquery'),
-            AAISEO_PLUGIN_VERSION,
-            true
-        );
+        if (file_exists(AAISEO_PLUGIN_PATH . 'assets/js/admin.js')) {
+            wp_enqueue_script(
+                'aaiseo-admin',
+                AAISEO_PLUGIN_URL . 'assets/js/admin.js',
+                array('jquery'),
+                AAISEO_PLUGIN_VERSION,
+                true
+            );
+        }
         
-        // Localize script
-        wp_localize_script(
-            'aaiseo-admin',
-            'aaiseo_ajax',
-            array(
-                'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('aaiseo_nonce'),
-                'plugin_url' => AAISEO_PLUGIN_URL
-            )
-        );
+        // Only localize if the script was enqueued
+        if (wp_script_is('aaiseo-admin', 'enqueued')) {
+            wp_localize_script(
+                'aaiseo-admin',
+                'aaiseo_ajax',
+                array(
+                    'ajax_url' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('aaiseo_nonce'),
+                    'plugin_url' => AAISEO_PLUGIN_URL
+                )
+            );
+        }
     }
     
     /**
@@ -271,6 +283,9 @@ class Autonomous_AI_SEO {
         ) $charset_collate;";
         
         dbDelta($cache_sql);
+        
+        // Update plugin version in database
+        update_option('aaiseo_db_version', AAISEO_PLUGIN_VERSION);
     }
     
     /**
@@ -288,7 +303,16 @@ class Autonomous_AI_SEO {
         
         // Clear custom cache table
         $cache_table = $wpdb->prefix . 'aaiseo_cache';
-        $wpdb->query("TRUNCATE TABLE $cache_table");
+        
+        // Check if table exists before truncating
+        $table_exists = $wpdb->get_var($wpdb->prepare(
+            "SHOW TABLES LIKE %s",
+            $cache_table
+        ));
+        
+        if ($table_exists) {
+            $wpdb->query("TRUNCATE TABLE $cache_table");
+        }
     }
 }
 
