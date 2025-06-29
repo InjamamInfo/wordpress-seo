@@ -93,6 +93,19 @@ class Autonomous_AI_SEO {
         // Core classes - using the actual file name
         require_once AAISEO_PLUGIN_PATH . 'class-aaiseo-ai-engine-fixed.php';
         
+        // Load new enhanced features
+        if (file_exists(AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-gutenberg.php')) {
+            require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-gutenberg.php';
+        }
+        
+        if (file_exists(AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-rest-api.php')) {
+            require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-rest-api.php';
+        }
+        
+        if (file_exists(AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-real-time.php')) {
+            require_once AAISEO_PLUGIN_PATH . 'includes/class-aaiseo-real-time.php';
+        }
+        
         // Load admin interface
         if (is_admin() && file_exists(AAISEO_PLUGIN_PATH . 'basic-admin-interface.php')) {
             require_once AAISEO_PLUGIN_PATH . 'basic-admin-interface.php';
