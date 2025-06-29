@@ -14,6 +14,7 @@ class AAISEO_Gutenberg {
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_assets'));
         add_action('wp_ajax_aaiseo_analyze_content', array($this, 'ajax_analyze_content'));
         add_action('wp_ajax_aaiseo_generate_suggestions', array($this, 'ajax_generate_suggestions'));
+        add_action('wp_ajax_aaiseo_research_keywords', array($this, 'ajax_research_keywords'));
     }
     
     /**
@@ -169,6 +170,34 @@ class AAISEO_Gutenberg {
         }
         
         wp_send_json_success($outline);
+    }
+    
+    /**
+     * AJAX handler for keyword research
+     */
+    public function ajax_research_keywords() {
+        check_ajax_referer('aaiseo_blocks_nonce', 'nonce');
+        
+        $primary_keyword = sanitize_text_field($_POST['primary_keyword']);
+        $content = isset($_POST['content']) ? wp_unslash($_POST['content']) : '';
+        
+        if (empty($primary_keyword)) {
+            wp_send_json_error(__('Please provide a primary keyword.', 'autonomous-ai-seo'));
+        }
+        
+        $ai_engine = AAISEO_AI_Engine::getInstance();
+        $keywords = $ai_engine->analyzeSemanticKeywords($content, $primary_keyword);
+        
+        if (is_wp_error($keywords)) {
+            wp_send_json_error($keywords->get_error_message());
+        }
+        
+        // Parse JSON if it's a string
+        if (is_string($keywords)) {
+            $keywords = json_decode($keywords, true);
+        }
+        
+        wp_send_json_success($keywords);
     }
 }
 

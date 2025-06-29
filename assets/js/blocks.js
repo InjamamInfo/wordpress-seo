@@ -402,29 +402,37 @@
                     error: null
                 });
 
-                // Simulate API call for keyword research
-                setTimeout(function() {
-                    var mockKeywords = {
-                        semantic_keywords: [
-                            attributes.primaryKeyword + ' guide',
-                            attributes.primaryKeyword + ' tips',
-                            'best ' + attributes.primaryKeyword,
-                            attributes.primaryKeyword + ' strategies'
-                        ],
-                        long_tail_variations: [
-                            'how to improve ' + attributes.primaryKeyword,
-                            attributes.primaryKeyword + ' for beginners',
-                            attributes.primaryKeyword + ' best practices'
-                        ]
-                    };
-                    
+                wp.apiFetch({
+                    url: aaiseoBlocks.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action: 'aaiseo_research_keywords',
+                        primary_keyword: attributes.primaryKeyword,
+                        content: '', // Could be enhanced to get current post content
+                        nonce: aaiseoBlocks.nonce
+                    }
+                }).then(function(response) {
+                    if (response.success) {
+                        setState({
+                            ...currentState,
+                            isResearching: false,
+                            keywords: response.data,
+                            error: null
+                        });
+                    } else {
+                        setState({
+                            ...currentState,
+                            isResearching: false,
+                            error: response.data || aaiseoBlocks.strings.error
+                        });
+                    }
+                }).catch(function(error) {
                     setState({
                         ...currentState,
                         isResearching: false,
-                        keywords: mockKeywords,
-                        error: null
+                        error: aaiseoBlocks.strings.error
                     });
-                }, 2000);
+                });
             }
 
             function renderKeywords() {
@@ -448,6 +456,15 @@
                         el('h5', {}, __('Long-tail Variations:', 'autonomous-ai-seo')),
                         el('div', {className: 'aaiseo-keyword-tags'},
                             keywords.long_tail_variations.map(function(keyword, index) {
+                                return el('span', {key: index, className: 'aaiseo-keyword-tag'}, keyword);
+                            })
+                        )
+                    ),
+                    
+                    keywords.lsi_keywords && el('div', {className: 'aaiseo-keyword-group'},
+                        el('h5', {}, __('LSI Keywords:', 'autonomous-ai-seo')),
+                        el('div', {className: 'aaiseo-keyword-tags'},
+                            keywords.lsi_keywords.map(function(keyword, index) {
                                 return el('span', {key: index, className: 'aaiseo-keyword-tag'}, keyword);
                             })
                         )

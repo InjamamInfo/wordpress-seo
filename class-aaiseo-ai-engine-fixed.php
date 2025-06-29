@@ -645,15 +645,15 @@ class AAISEO_AI_Engine {
     public function analyzeContent($content, $target_keywords = array(), $context = array(), $provider = null) {
         // Get active provider
         $provider_status = $this->getAPIProviderStatus();
-        $provider = $provider_status['active_provider'];
+        $selected_provider = $provider ?: $provider_status['active_provider'];
         
         // If using internal, use simplified analysis
-        if ($provider === 'internal') {
+        if ($selected_provider === 'internal') {
             return $this->performInternalAnalysis($content, $target_keywords, $context);
         }
         
         // Check cache first regardless of provider
-        $cache_key = 'aaiseo_content_analysis_' . md5($content . serialize($target_keywords) . $provider);
+        $cache_key = 'aaiseo_content_analysis_' . md5($content . serialize($target_keywords) . $selected_provider);
         $cached_result = get_transient($cache_key);
         
         if ($cached_result !== false) {
@@ -663,7 +663,7 @@ class AAISEO_AI_Engine {
         $prompt = $this->buildEnhancedContentAnalysisPrompt($content, $target_keywords, $context);
         $system_prompt = 'You are an expert SEO analyst with expertise in content optimization, sentiment analysis, and plagiarism detection. Provide comprehensive analysis in JSON format.';
         
-        $response = $this->makeAIRequest($prompt, $system_prompt, $provider);
+        $response = $this->makeAIRequest($prompt, $system_prompt, $selected_provider);
         
         if (is_wp_error($response)) {
             // Fall back to internal analysis
@@ -1018,5 +1018,348 @@ Please provide analysis in the following JSON structure:
         }
         
         return array('recommendations' => array());
+    }
+    
+    /**
+     * Generate content outline
+     */
+    public function generateContentOutline($topic, $target_audience = '', $provider = null) {
+        // Get active provider
+        $provider_status = $this->getAPIProviderStatus();
+        $selected_provider = $provider ?: $provider_status['active_provider'];
+        
+        // If using internal, generate basic outline
+        if ($selected_provider === 'internal') {
+            return $this->generateInternalOutline($topic, $target_audience);
+        }
+        
+        // Check cache first
+        $cache_key = 'aaiseo_outline_' . md5($topic . $target_audience . $selected_provider);
+        $cached_result = get_transient($cache_key);
+        
+        if ($cached_result !== false) {
+            return $cached_result;
+        }
+        
+        $prompt = "Create a comprehensive content outline for the topic: '{$topic}'";
+        if (!empty($target_audience)) {
+            $prompt .= " targeting audience: {$target_audience}";
+        }
+        
+        $prompt .= "
+
+Please provide the response in JSON format:
+{
+  \"title_suggestions\": [
+    \"suggested title 1\",
+    \"suggested title 2\",
+    \"suggested title 3\"
+  ],
+  \"outline\": [
+    {
+      \"heading\": \"Main Section 1\",
+      \"subheadings\": [\"Subsection 1.1\", \"Subsection 1.2\"]
+    },
+    {
+      \"heading\": \"Main Section 2\",
+      \"subheadings\": [\"Subsection 2.1\", \"Subsection 2.2\"]
+    }
+  ],
+  \"meta_description\": \"Suggested meta description\"
+}";
+        
+        $system_prompt = 'You are an expert content strategist who creates detailed, SEO-optimized content outlines. Always respond in valid JSON format.';
+        
+        $response = $this->makeAIRequest($prompt, $system_prompt, $selected_provider);
+        
+        if (is_wp_error($response)) {
+            return $this->generateInternalOutline($topic, $target_audience);
+        }
+        
+        // Try to parse JSON response
+        $parsed = json_decode($response, true);
+        
+        if (!$parsed) {
+            // Try to extract JSON from response
+            preg_match('/```json\s*(.*?)\s*```/s', $response, $matches);
+            if (!empty($matches[1])) {
+                $parsed = json_decode($matches[1], true);
+            }
+            
+            if (!$parsed) {
+                return $this->generateInternalOutline($topic, $target_audience);
+            }
+        }
+        
+        // Cache the result
+        set_transient($cache_key, $parsed, $this->cache_duration);
+        
+        return $parsed;
+    }
+    
+    /**
+     * Generate internal content outline (fallback)
+     */
+    private function generateInternalOutline($topic, $target_audience = '') {
+        $audience_text = !empty($target_audience) ? " for {$target_audience}" : '';
+        
+        return array(
+            'title_suggestions' => array(
+                "Complete Guide to {$topic}",
+                "Everything You Need to Know About {$topic}",
+                "The Ultimate {$topic} Guide{$audience_text}",
+                "Mastering {$topic}: A Comprehensive Overview",
+                "{$topic} Explained: Tips and Best Practices"
+            ),
+            'outline' => array(
+                array(
+                    'heading' => "Introduction to {$topic}",
+                    'subheadings' => array(
+                        "What is {$topic}?",
+                        "Why {$topic} matters",
+                        "Key benefits and applications"
+                    )
+                ),
+                array(
+                    'heading' => "Getting Started with {$topic}",
+                    'subheadings' => array(
+                        "Basic concepts and terminology",
+                        "Essential tools and resources",
+                        "Common challenges and solutions"
+                    )
+                ),
+                array(
+                    'heading' => "Best Practices for {$topic}",
+                    'subheadings' => array(
+                        "Industry standards and guidelines",
+                        "Expert tips and recommendations",
+                        "Common mistakes to avoid"
+                    )
+                ),
+                array(
+                    'heading' => "Advanced {$topic} Techniques",
+                    'subheadings' => array(
+                        "Advanced strategies and methods",
+                        "Case studies and examples",
+                        "Future trends and developments"
+                    )
+                ),
+                array(
+                    'heading' => "Conclusion",
+                    'subheadings' => array(
+                        "Key takeaways",
+                        "Next steps and recommendations",
+                        "Additional resources"
+                    )
+                )
+            ),
+            'meta_description' => "Comprehensive guide to {$topic}{$audience_text}. Learn best practices, expert tips, and advanced techniques to master {$topic} effectively."
+        );
+    }
+    
+    /**
+     * Analyze semantic keywords
+     */
+    public function analyzeSemanticKeywords($content, $primary_keyword, $provider = null) {
+        // Get active provider
+        $provider_status = $this->getAPIProviderStatus();
+        $selected_provider = $provider ?: $provider_status['active_provider'];
+        
+        // If using internal, generate basic keywords
+        if ($selected_provider === 'internal') {
+            return $this->generateInternalKeywordSuggestions("Primary keyword: {$primary_keyword}\nContent: {$content}");
+        }
+        
+        // Check cache first
+        $cache_key = 'aaiseo_keywords_' . md5($content . $primary_keyword . $selected_provider);
+        $cached_result = get_transient($cache_key);
+        
+        if ($cached_result !== false) {
+            return $cached_result;
+        }
+        
+        $prompt = "Analyze the following content and generate semantic keywords and variations for the primary keyword: '{$primary_keyword}'
+
+Content: {$content}
+
+Please provide the response in JSON format:
+{
+  \"primary_keyword\": \"{$primary_keyword}\",
+  \"semantic_keywords\": [
+    \"related keyword 1\",
+    \"related keyword 2\",
+    \"related keyword 3\"
+  ],
+  \"long_tail_variations\": [
+    \"long tail keyword 1\",
+    \"long tail keyword 2\",
+    \"long tail keyword 3\"
+  ],
+  \"lsi_keywords\": [
+    \"LSI keyword 1\",
+    \"LSI keyword 2\",
+    \"LSI keyword 3\"
+  ]
+}";
+        
+        $system_prompt = 'You are an expert SEO keyword researcher who identifies semantic keywords, long-tail variations, and LSI keywords. Always respond in valid JSON format.';
+        
+        $response = $this->makeAIRequest($prompt, $system_prompt, $selected_provider);
+        
+        if (is_wp_error($response)) {
+            return $this->generateInternalKeywordSuggestions("Primary keyword: {$primary_keyword}\nContent: {$content}");
+        }
+        
+        // Try to parse JSON response
+        $parsed = json_decode($response, true);
+        
+        if (!$parsed) {
+            // Try to extract JSON from response
+            preg_match('/```json\s*(.*?)\s*```/s', $response, $matches);
+            if (!empty($matches[1])) {
+                $parsed = json_decode($matches[1], true);
+            }
+            
+            if (!$parsed) {
+                return $this->generateInternalKeywordSuggestions("Primary keyword: {$primary_keyword}\nContent: {$content}");
+            }
+        }
+        
+        // Cache the result
+        set_transient($cache_key, $parsed, $this->cache_duration);
+        
+        return $parsed;
+    }
+    
+    /**
+     * Generate meta description
+     */
+    public function generateMetaDescription($title, $content, $keywords = array(), $provider = null) {
+        // Get active provider
+        $provider_status = $this->getAPIProviderStatus();
+        $selected_provider = $provider ?: $provider_status['active_provider'];
+        
+        // If using internal, generate basic meta description
+        if ($selected_provider === 'internal') {
+            return $this->generateInternalMetaDescription($title, $content, $keywords);
+        }
+        
+        // Check cache first
+        $cache_key = 'aaiseo_meta_' . md5($title . $content . serialize($keywords) . $selected_provider);
+        $cached_result = get_transient($cache_key);
+        
+        if ($cached_result !== false) {
+            return $cached_result;
+        }
+        
+        $keywords_text = !empty($keywords) ? "Target keywords: " . implode(', ', $keywords) : '';
+        
+        $prompt = "Generate multiple compelling meta descriptions for the following content:
+
+Title: {$title}
+{$keywords_text}
+
+Content summary: " . substr(strip_tags($content), 0, 500) . "...
+
+Requirements:
+- 150-160 characters each
+- Include primary keywords naturally
+- Compelling and click-worthy
+- Accurately describe the content
+
+Please provide the response in JSON format:
+{
+  \"variations\": [
+    {
+      \"description\": \"Meta description variation 1\",
+      \"character_count\": 155
+    },
+    {
+      \"description\": \"Meta description variation 2\",
+      \"character_count\": 158
+    },
+    {
+      \"description\": \"Meta description variation 3\",
+      \"character_count\": 152
+    }
+  ]
+}";
+        
+        $system_prompt = 'You are an expert copywriter who creates compelling meta descriptions that improve click-through rates. Always respond in valid JSON format.';
+        
+        $response = $this->makeAIRequest($prompt, $system_prompt, $selected_provider);
+        
+        if (is_wp_error($response)) {
+            return $this->generateInternalMetaDescription($title, $content, $keywords);
+        }
+        
+        // Try to parse JSON response
+        $parsed = json_decode($response, true);
+        
+        if (!$parsed) {
+            // Try to extract JSON from response
+            preg_match('/```json\s*(.*?)\s*```/s', $response, $matches);
+            if (!empty($matches[1])) {
+                $parsed = json_decode($matches[1], true);
+            }
+            
+            if (!$parsed) {
+                return $this->generateInternalMetaDescription($title, $content, $keywords);
+            }
+        }
+        
+        // Cache the result
+        set_transient($cache_key, $parsed, $this->cache_duration);
+        
+        return $parsed;
+    }
+    
+    /**
+     * Generate internal meta description (fallback)
+     */
+    private function generateInternalMetaDescription($title, $content, $keywords = array()) {
+        $content_summary = strip_tags($content);
+        $sentences = preg_split('/[.!?]+/', $content_summary, -1, PREG_SPLIT_NO_EMPTY);
+        
+        // Get first meaningful sentence or create one from title
+        $base_description = '';
+        if (!empty($sentences[0]) && strlen(trim($sentences[0])) > 20) {
+            $base_description = trim($sentences[0]);
+        } else {
+            $base_description = "Learn about {$title} with our comprehensive guide";
+        }
+        
+        // Add keywords if provided
+        $keyword_text = '';
+        if (!empty($keywords)) {
+            $keyword_text = ". Covers " . implode(', ', array_slice($keywords, 0, 3));
+        }
+        
+        $descriptions = array();
+        
+        // Variation 1: Direct approach
+        $desc1 = $base_description . $keyword_text . ". Expert insights and practical tips.";
+        $descriptions[] = array(
+            'description' => substr($desc1, 0, 160),
+            'character_count' => strlen(substr($desc1, 0, 160))
+        );
+        
+        // Variation 2: Question-based
+        $desc2 = "Looking for information about {$title}? Discover everything you need to know{$keyword_text} in this detailed guide.";
+        $descriptions[] = array(
+            'description' => substr($desc2, 0, 160),
+            'character_count' => strlen(substr($desc2, 0, 160))
+        );
+        
+        // Variation 3: Benefit-focused
+        $desc3 = "Complete guide to {$title}. Get expert tips, best practices{$keyword_text} to achieve better results.";
+        $descriptions[] = array(
+            'description' => substr($desc3, 0, 160),
+            'character_count' => strlen(substr($desc3, 0, 160))
+        );
+        
+        return array(
+            'variations' => $descriptions
+        );
     }
 }
